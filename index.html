@@ -71,6 +71,31 @@
         let distanceData = [];
         let timeChart, distanceChart;
 
+        function updateSpeed(position) {
+            if (position.coords.speed !== null) {
+                let speedKmh = position.coords.speed * 3.6; // Převod z m/s na km/h
+                if (speedKmh > 0) {
+                    document.getElementById('speed').innerText = `Rychlost: ${speedKmh.toFixed(2)} km/h`;
+                } else {
+                    document.getElementById('speed').innerText = 'Stojíte na místě';
+                }
+            } else {
+                document.getElementById('speed').innerText = 'Nelze určit rychlost';
+            }
+        }
+        
+        function errorHandler(error) {
+            document.getElementById('speed').innerText = 'Chyba při získávání polohy';
+        }
+        
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(updateSpeed, errorHandler, {
+                enableHighAccuracy: true
+            });
+        } else {
+            document.getElementById('speed').innerText = 'Geolokace není podporována';
+        }
+
         function toggleTracking() {
             let button = document.getElementById('trackingButton');
             if (!trackingEnabled) {
