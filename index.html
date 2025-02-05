@@ -4,46 +4,185 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sledování rychlosti</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
             text-align: center;
             padding: 20px;
         }
-        #speed {
+        #speed, #distance, #time {
             font-size: 2em;
             margin-top: 20px;
+        }
+        #trackingButton, #resetButton {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            font-size: 1em;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            width: 200px;
+        }
+        .enabled {
+            background-color: green;
+        }
+        .disabled {
+            background-color: red;
+        }
+        .paused {
+            background-color: orange;
+        }
+        .spacer {
+            margin-top: 40px;
+        }
+        #chartContainer {
+            display: block;
+            margin-top: 40px;
         }
     </style>
 </head>
 <body>
     <h1>Aktuální rychlost</h1>
     <p id="speed">Získávám data...</p>
-    
+    <h2>Ujetá vzdálenost</h2>
+    <p id="distance">0.0 km</p>
+    <h2>Čas</h2>
+    <p id="time">00:00:00</p>
+    <button id="trackingButton" class="disabled" onclick="toggleTracking()">Nahrávání: Vypnuté</button>
+    <button id="resetButton" class="disabled" onclick="resetTracking()">Resetovat</button>
+    <div class="spacer"></div>
+    <div id="chartContainer">
+        <canvas id="speedTimeChart"></canvas>
+        <canvas id="speedDistanceChart"></canvas>
+    </div>
+
     <script>
-        function updateSpeed(position) {
-            if (position.coords.speed !== null) {
-                let speedKmh = position.coords.speed * 3.6; // Převod z m/s na km/h
-                if (speedKmh > 0) {
-                    document.getElementById('speed').innerText = `Rychlost: ${speedKmh.toFixed(2)} km/h`;
-                } else {
-                    document.getElementById('speed').innerText = 'Stojíte na místě';
-                }
+        let currentSpeed = 0;
+        let trackingEnabled = false;
+        let trackingPaused = false;
+        let totalDistance = 0;
+        let trackingTime = 0;
+        let timeInterval;
+        let speedData = [];
+        let timeData = [];
+        let distanceData = [];
+        let timeChart, distanceChart;
+
+        function toggleTracking() {
+            let button = document.getElementById('trackingButton');
+            if (!trackingEnabled) {
+                trackingEnabled = true;
+                trackingPaused = false;
+                button.innerText = 'Nahrávání: Zapnuté';
+                button.className = 'enabled';
+                startTrackingTime();
+                initializeCharts();
             } else {
-                document.getElementById('speed').innerText = 'Nelze určit rychlost';
+                trackingEnabled = false;
+                trackingPaused = true;
+                button.innerText = 'Nahrávání: Pozastaveno';
+                button.className = 'paused';
+                stopTrackingTime();
             }
         }
-        
-        function errorHandler(error) {
-            document.getElementById('speed').innerText = 'Chyba při získávání polohy';
+
+        function resetTracking() {
+            trackingEnabled = false;
+            trackingPaused = false;
+            document.getElementById('trackingButton').innerText = 'Nahrávání: Vypnuté';
+            document.getElementById('trackingButton').className = 'disabled';
+            totalDistance = 0;
+            trackingTime = 0;
+            speedData = [];
+            timeData = [];
+            distanceData = [];
+            document.getElementById('distance').innerText = '0.0 km';
+            document.getElementById('time').innerText = '00:00:00';
+            updateCharts();
         }
-        
-        if (navigator.geolocation) {
-            navigator.geolocation.watchPosition(updateSpeed, errorHandler, {
-                enableHighAccuracy: true
+
+        function startTrackingTime() {
+            timeInterval = setInterval(() => {
+                trackingTime++;
+                document.getElementById('time').innerText = formatTime(trackingTime);
+                timeData.push(trackingTime);
+                speedData.push(currentSpeed);
+                distanceData.push(totalDistance.toFixed(2));
+                updateCharts();
+            }, 1000);
+        }
+
+        function stopTrackingTime() {
+            clearInterval(timeInterval);
+        }
+
+        function formatTime(seconds) {
+            let h = Math.floor(seconds / 3600);
+            let m = Math.floor((seconds % 3600) / 60);
+            let s = seconds % 60;
+            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        }
+
+        function initializeCharts() {
+            let ctxTime = document.getElementById('speedTimeChart').getContext('2d');
+            let ctxDistance = document.getElementById('speedDistanceChart').getContext('2d');
+            
+            if (timeChart) timeChart.destroy();
+            if (distanceChart) distanceChart.destroy();
+
+            timeChart = new Chart(ctxTime, {
+                type: 'line',
+                data: {
+                    labels: timeData,
+                    datasets: [{
+                        label: 'Rychlost (km/h) vs. Čas',
+                        data: speedData,
+                        borderColor: 'blue',
+                        fill: false,
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: { title: { display: true, text: 'Čas (HH:MM:SS)' } },
+                        y: { title: { display: true, text: 'Rychlost (km/h)' }, beginAtZero: true }
+                    }
+                }
             });
-        } else {
-            document.getElementById('speed').innerText = 'Geolokace není podporována';
+
+            distanceChart = new Chart(ctxDistance, {
+                type: 'line',
+                data: {
+                    labels: distanceData,
+                    datasets: [{
+                        label: 'Rychlost (km/h) vs. Ujetá vzdálenost',
+                        data: speedData,
+                        borderColor: 'red',
+                        fill: false,
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: { title: { display: true, text: 'Ujetá vzdálenost (km)' } },
+                        y: { title: { display: true, text: 'Rychlost (km/h)' }, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        function updateCharts() {
+            if (timeChart) {
+                timeChart.data.labels = timeData;
+                timeChart.data.datasets[0].data = speedData;
+                timeChart.update();
+            }
+            if (distanceChart) {
+                distanceChart.data.labels = distanceData;
+                distanceChart.data.datasets[0].data = speedData;
+                distanceChart.update();
+            }
         }
     </script>
 </body>
